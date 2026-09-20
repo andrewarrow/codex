@@ -1542,7 +1542,7 @@ impl ChatWidget {
                 /*reasoning_effort*/ None,
                 /*show_fast_status*/ false,
                 config.cwd.to_path_buf(),
-                CODEX_CLI_VERSION,
+                crate::version::codex_cli_version_for_display(),
             )
             .with_yolo_mode(history_cell::is_yolo_mode(config)),
         )

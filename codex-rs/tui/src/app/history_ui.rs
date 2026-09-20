@@ -315,7 +315,10 @@ impl App {
     }
 
     pub(super) fn clear_ui_header_lines(&self, width: u16) -> Vec<Line<'static>> {
-        self.clear_ui_header_lines_with_version(width, CODEX_CLI_VERSION)
+        self.clear_ui_header_lines_with_version(
+            width,
+            crate::version::codex_cli_version_for_display(),
+        )
     }
 
     pub(super) fn queue_clear_ui_header(&mut self, tui: &mut tui::Tui) {
@@ -324,8 +327,9 @@ impl App {
                 cell.as_any().is::<history_cell::SessionInfoCell>()
                     || cell.as_any().is::<history_cell::SessionHeaderHistoryCell>()
             }) {
-                let header: Arc<dyn HistoryCell> =
-                    Arc::new(self.clear_ui_header_cell(CODEX_CLI_VERSION));
+                let header: Arc<dyn HistoryCell> = Arc::new(
+                    self.clear_ui_header_cell(crate::version::codex_cli_version_for_display()),
+                );
                 self.transcript_cells.insert(/*index*/ 0, header);
             }
             tui.frame_requester().schedule_frame();
