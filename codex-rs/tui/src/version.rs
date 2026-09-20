@@ -28,6 +28,14 @@ fn build_info_version_for_display(build_info: &BuildInfo) -> String {
     build_info.version().to_string()
 }
 
+pub(crate) fn format_version_for_header(version: &str) -> String {
+    if version.len() == 8 && version.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        version.to_string()
+    } else {
+        format!("v{version}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -51,5 +59,11 @@ mod tests {
         let build_info = BuildInfo::from_version("0.0.0");
 
         assert_eq!(build_info_version_for_display(&build_info), "0.0.0");
+    }
+
+    #[test]
+    fn header_omits_version_prefix_for_abbreviated_commit() {
+        assert_eq!(format_version_for_header("01234567"), "01234567");
+        assert_eq!(format_version_for_header("1.2.3"), "v1.2.3");
     }
 }

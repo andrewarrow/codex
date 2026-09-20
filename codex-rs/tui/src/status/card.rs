@@ -738,8 +738,10 @@ impl StatusHistoryCell {
             Span::from("OpenAI Codex").bold(),
             Span::from(" ").dim(),
             Span::from(format!(
-                "(v{})",
-                crate::version::codex_cli_version_for_display()
+                "({})",
+                crate::version::format_version_for_header(
+                    crate::version::codex_cli_version_for_display()
+                )
             ))
             .dim(),
         ]));
