@@ -594,16 +594,16 @@ async fn rate_limit_warnings_emit_thresholds() {
 }
 
 #[tokio::test]
-async fn rate_limit_usage_warnings_early_threshold_is_scoped_and_deduplicated() {
-    for (plan_type, window_minutes, should_warn_early) in [
-        (Some(PlanType::Plus), Some(300), true),
-        (Some(PlanType::Team), Some(299), true),
-        (Some(PlanType::Pro), Some(300), false),
-        (Some(PlanType::Business), Some(300), false),
-        (Some(PlanType::SelfServeBusinessProLite), Some(300), false),
-        (None, Some(300), false),
-        (Some(PlanType::Plus), Some(10080), false),
-        (Some(PlanType::Team), None, false),
+async fn rate_limit_usage_warnings_are_disabled() {
+    for (plan_type, window_minutes) in [
+        (Some(PlanType::Plus), Some(300)),
+        (Some(PlanType::Team), Some(299)),
+        (Some(PlanType::Pro), Some(300)),
+        (Some(PlanType::Business), Some(300)),
+        (Some(PlanType::SelfServeBusinessProLite), Some(300)),
+        (None, Some(300)),
+        (Some(PlanType::Plus), Some(10080)),
+        (Some(PlanType::Team), None),
     ] {
         let (mut chat, mut rx, _) = make_chatwidget_manual(Some("gpt-5")).await;
         let mut usage = snapshot(/*percent*/ 49.0);
@@ -617,22 +617,14 @@ async fn rate_limit_usage_warnings_early_threshold_is_scoped_and_deduplicated() 
         usage.primary.as_mut().unwrap().used_percent = 50;
         chat.on_rolling_rate_limit_snapshot(usage.clone());
         let warnings = drain_insert_history_transcript(&mut rx);
-        assert_eq!(!warnings.is_empty(), should_warn_early);
-        if should_warn_early {
-            insta::allow_duplicates! {
-                insta::assert_snapshot!(lines_to_single_string(&warnings.concat()), @r"
-                ⚠ Heads up, you have less than 50% of your 5h limit left. Run /status for a
-                  breakdown.
-                ");
-            }
-        }
+        assert!(warnings.is_empty());
 
         chat.on_rolling_rate_limit_snapshot(usage.clone());
         assert!(drain_insert_history_transcript(&mut rx).is_empty());
         for used_percent in [75, 90, 95] {
             usage.primary.as_mut().unwrap().used_percent = used_percent;
             chat.on_rolling_rate_limit_snapshot(usage.clone());
-            assert_eq!(drain_insert_history_transcript(&mut rx).len(), 1);
+            assert!(drain_insert_history_transcript(&mut rx).is_empty());
             chat.on_rolling_rate_limit_snapshot(usage.clone());
             assert!(drain_insert_history_transcript(&mut rx).is_empty());
         }
@@ -1242,7 +1234,7 @@ async fn rate_limit_usage_warnings_follow_workspace_credit_flags() {
 
         chat.on_rate_limit_snapshot(Some(rate_limit_snapshot));
 
-        assert_eq!(!drain_insert_history(&mut rx).is_empty(), should_warn);
+        assert!(drain_insert_history(&mut rx).is_empty());
         assert_eq!(
             matches!(
                 chat.rate_limit_switch_prompt,
@@ -1269,10 +1261,7 @@ async fn rate_limit_usage_warnings_show_when_authoritative_snapshot_clears_credi
 
     chat.on_rate_limit_snapshot(Some(snapshot(/*percent*/ 95.0)));
 
-    assert!(
-        !drain_insert_history(&mut rx).is_empty(),
-        "an authoritative snapshot without credits should clear stale credit availability"
-    );
+    assert!(drain_insert_history(&mut rx).is_empty());
     assert!(matches!(
         chat.rate_limit_switch_prompt,
         RateLimitSwitchPromptState::Pending
@@ -1364,10 +1353,7 @@ async fn rate_limit_usage_warnings_preserve_workspace_limit_for_sparse_snapshots
 
         chat.on_rolling_rate_limit_snapshot(snapshot(/*percent*/ 95.0));
 
-        assert!(
-            !drain_insert_history(&mut rx).is_empty(),
-            "an explicit workspace hard stop should keep proactive usage warnings enabled"
-        );
+        assert!(drain_insert_history(&mut rx).is_empty());
         assert!(matches!(
             chat.rate_limit_switch_prompt,
             RateLimitSwitchPromptState::Pending
@@ -1431,10 +1417,7 @@ async fn rate_limit_usage_warnings_keep_workspace_limit_after_rolling_credits() 
             rolling_snapshot.credits = Some(credits);
             chat.on_rolling_rate_limit_snapshot(rolling_snapshot);
 
-            assert!(
-                !drain_insert_history(&mut rx).is_empty(),
-                "usable rolling workspace credits must not suppress an existing workspace hard stop"
-            );
+            assert!(drain_insert_history(&mut rx).is_empty());
             assert!(matches!(
                 chat.rate_limit_switch_prompt,
                 RateLimitSwitchPromptState::Pending
@@ -1469,10 +1452,7 @@ async fn rate_limit_usage_warnings_keep_explicit_rolling_workspace_limit() {
             rolling_snapshot.spend_control_reached = spend_control_reached;
             chat.on_rolling_rate_limit_snapshot(rolling_snapshot);
 
-            assert!(
-                !drain_insert_history(&mut rx).is_empty(),
-                "an explicit rolling workspace hard stop should keep proactive usage warnings enabled"
-            );
+            assert!(drain_insert_history(&mut rx).is_empty());
             assert!(matches!(
                 chat.rate_limit_switch_prompt,
                 RateLimitSwitchPromptState::Pending
@@ -1511,7 +1491,7 @@ async fn rate_limit_usage_warnings_keep_newly_reached_workspace_limit() {
             Some(RateLimitReachedType::WorkspaceMemberUsageLimitReached);
         chat.on_rolling_rate_limit_snapshot(capped_snapshot);
 
-        assert_eq!(!drain_insert_history(&mut rx).is_empty(), should_warn);
+        assert!(drain_insert_history(&mut rx).is_empty());
         assert_eq!(
             matches!(
                 chat.rate_limit_switch_prompt,
@@ -1551,10 +1531,7 @@ async fn rate_limit_usage_warnings_preserve_and_clear_spend_control_state() {
     assert_eq!(chat.codex_spend_control_reached, Some(true));
 
     chat.on_rolling_rate_limit_snapshot(snapshot(/*percent*/ 95.0));
-    assert!(
-        !drain_insert_history(&mut rx).is_empty(),
-        "a sparse rolling snapshot should preserve a reached spend control"
-    );
+    assert!(drain_insert_history(&mut rx).is_empty());
     assert!(matches!(
         chat.rate_limit_switch_prompt,
         RateLimitSwitchPromptState::Pending

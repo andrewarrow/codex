@@ -17,6 +17,8 @@ pub(super) const RATE_LIMIT_SWITCH_PROMPT_THRESHOLD: f64 = 90.0;
 pub(super) const RATE_LIMIT_SWITCH_PROMPT_VIEW_ID: &str = "rate-limit-switch-prompt";
 
 const RATE_LIMIT_WARNING_THRESHOLDS: [f64; 4] = [50.0, 75.0, 90.0, 95.0];
+// Temporarily keep the warning logic and its state tracking, but do not surface these notices.
+const RATE_LIMIT_WARNINGS_ENABLED: bool = false;
 const PRIMARY_LIMIT_FALLBACK_LABEL: &str = "usage";
 const SECONDARY_LIMIT_FALLBACK_LABEL: &str = "secondary usage";
 
@@ -373,7 +375,7 @@ impl ChatWidget {
                     .insert(limit_id, display);
             }
 
-            if !warnings.is_empty() {
+            if RATE_LIMIT_WARNINGS_ENABLED && !warnings.is_empty() {
                 for warning in warnings {
                     self.add_to_history(history_cell::new_warning_event(warning));
                 }
