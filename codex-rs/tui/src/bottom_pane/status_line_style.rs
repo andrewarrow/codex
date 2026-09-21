@@ -7,15 +7,21 @@ use ratatui::text::Line;
 use ratatui::text::Span;
 
 use super::status_line_setup::StatusLineItem;
+use crate::color::blend;
 use crate::render::highlight::foreground_style_for_scopes;
 use crate::style::readable_color_on;
 use crate::style::secondary_text_style;
+use crate::terminal_palette::best_color;
+use crate::terminal_palette::default_bg;
 use crate::thread_color::thread_color;
 use codex_protocol::ThreadId;
 
 const STATUS_LINE_SEPARATOR: &str = " · ";
 const STATUS_LINE_COLOR_SATURATION_PERCENT: u16 = 85;
 const STATUS_LINE_COLOR_BRIGHTNESS_PERCENT: u16 = 100;
+const CONTEXT_USAGE_ALERT_RED: (u8, u8, u8) = (220, 38, 38);
+const CONTEXT_USAGE_ALERT_MAX_ALPHA: f32 = 0.85;
+const CONTEXT_USAGE_ALERT_FOREGROUND_THRESHOLD_PERCENT: i64 = 60;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum StatusLineAccent {
@@ -145,10 +151,60 @@ where
         } else {
             style
         };
+        let style = if item == StatusLineItem::ContextUsed {
+            context_usage_style(style, &text)
+        } else {
+            style
+        };
         spans.push(Span::styled(text, style));
     }
 
     (!spans.is_empty()).then(|| Line::from(spans))
+}
+
+fn context_usage_style(style: Style, text: &str) -> Style {
+    let Some(percent) = text
+        .strip_prefix("Context ")
+        .and_then(|text| text.strip_suffix("% used"))
+        .and_then(|percent| percent.parse::<i64>().ok())
+    else {
+        return style;
+    };
+    let percent = percent.clamp(0, 100);
+    if percent == 0 {
+        return style;
+    }
+
+    let intensity = (percent as f32 / 100.0).powf(0.8) * CONTEXT_USAGE_ALERT_MAX_ALPHA;
+    let background = match default_bg() {
+        Some(terminal_background) => {
+            let background = best_color(blend(
+                CONTEXT_USAGE_ALERT_RED,
+                terminal_background,
+                intensity,
+            ));
+            if background == Color::Reset {
+                if percent >= CONTEXT_USAGE_ALERT_FOREGROUND_THRESHOLD_PERCENT {
+                    Color::Red
+                } else {
+                    return style;
+                }
+            } else {
+                background
+            }
+        }
+        None if percent >= CONTEXT_USAGE_ALERT_FOREGROUND_THRESHOLD_PERCENT => Color::Red,
+        None => return style,
+    };
+    let foreground = if percent >= CONTEXT_USAGE_ALERT_FOREGROUND_THRESHOLD_PERCENT {
+        Color::Reset
+    } else {
+        style.fg.unwrap_or(Color::Reset)
+    };
+
+    style
+        .bg(background)
+        .fg(readable_color_on(foreground, Some(background)))
 }
 
 fn soften_status_line_style(mut style: Style) -> Style {
@@ -208,6 +264,7 @@ fn soften_rgb_channel(channel: u8, luma: u16) -> u8 {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+    use ratatui::style::Color;
     use ratatui::style::Modifier;
 
     fn line_text(line: &Line<'static>) -> String {
@@ -261,6 +318,44 @@ mod tests {
         assert_eq!(line.spans[1].style, secondary_text_style());
         assert_eq!(line.spans[2].style.fg, Some(Color::Green));
         assert!(!line.spans[2].style.add_modifier.contains(Modifier::DIM));
+    }
+
+    #[test]
+    fn context_usage_alert_uses_a_red_background_ramp() {
+        let colors = crate::terminal_probe::DefaultColors {
+            fg: (220, 220, 220),
+            bg: (30, 30, 30),
+        };
+        crate::terminal_palette::with_test_default_colors(colors, || {
+            let low = status_line_from_segments_with_resolver(
+                [(StatusLineItem::ContextUsed, "Context 20% used".to_string())],
+                /*use_theme_colors*/ true,
+                /*thread_id*/ None,
+                |_| None,
+            )
+            .expect("low context usage status line");
+            let high = status_line_from_segments_with_resolver(
+                [(StatusLineItem::ContextUsed, "Context 88% used".to_string())],
+                /*use_theme_colors*/ true,
+                /*thread_id*/ None,
+                |_| None,
+            )
+            .expect("high context usage status line");
+
+            let low_style = low.spans[0].style;
+            let high_style = high.spans[0].style;
+            let (Some(Color::Rgb(low_r, low_g, low_b)), Some(Color::Rgb(high_r, high_g, high_b))) =
+                (low_style.bg, high_style.bg)
+            else {
+                panic!("expected truecolor context usage backgrounds");
+            };
+            assert!(high_r > low_r);
+            assert!(u16::from(high_r) - u16::from(high_g) > u16::from(low_r) - u16::from(low_g));
+            assert!(u16::from(high_r) - u16::from(high_b) > u16::from(low_r) - u16::from(low_b));
+            assert_ne!(high_style.fg, Some(Color::Green));
+
+            insta::assert_debug_snapshot!("context_usage_alert_ramp", (low, high));
+        });
     }
 
     #[test]

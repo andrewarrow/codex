@@ -1,0 +1,9 @@
+---
+source: tui/src/bottom_pane/status_line_style.rs
+assertion_line: 357
+expression: "(low, high)"
+---
+(
+    Line::from(Span::from("Context 20% used").green().bg(Color::Rgb(74, 31, 31))),
+    Line::from(Span::from("Context 88% used").fg(Color::Rgb(220, 220, 220)).bg(Color::Rgb(175, 36, 36))),
+)
